@@ -29,7 +29,7 @@ button{pointer-events:auto;border:1px solid #71809e;background:#101a32dd;color:#
 <script>
 const canvas=document.getElementById('c'),ctx=canvas.getContext('2d');
 let W,H,dpr,rockets=[],sparks=[],stars=[],count=0,soundOn=true,audioCtx=null;
-const colors=['#ff4b4b','#ffd34e','#5bbcff','#69e56f','#e889ff','#ff8b4d','#fff3a0'];
+const colors=['#ffffff','#62d9ff','#ffd83d','#ff3b3b','#ff5ca8','#a855ff','#55e66b'];
 function resize(){dpr=Math.min(devicePixelRatio||1,2);W=innerWidth;H=innerHeight;canvas.width=W*dpr;canvas.height=H*dpr;ctx.setTransform(dpr,0,0,dpr,0,0);
  stars=Array.from({length:Math.floor(W*H/9000)},()=>({x:Math.random()*W,y:Math.random()*H*.7,r:Math.random()*1.4+.2,a:Math.random()}))}
 addEventListener('resize',resize);resize();
