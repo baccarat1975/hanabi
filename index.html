@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>花火を打ち上げよう！</title>
+<style>
+html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#020719;color:white;font-family:system-ui,-apple-system,"Noto Sans JP",sans-serif;touch-action:none}
+canvas{display:block;width:100%;height:100%;background:radial-gradient(circle at 50% 30%,#10204a 0,#040b20 45%,#01030d 100%)}
+#ui{position:fixed;inset:0;pointer-events:none}
+.title{position:absolute;left:18px;top:14px;font-weight:800;font-size:clamp(20px,5vw,42px);text-shadow:0 0 12px #ffd36a}
+.help{position:absolute;left:20px;top:62px;font-size:clamp(12px,3vw,18px);opacity:.9}
+.counter{position:absolute;right:16px;top:14px;padding:10px 18px;border:2px solid #66708c;border-radius:16px;background:#0b1225dd;text-align:center}
+.counter b{display:block;font-size:clamp(25px,7vw,48px)}
+button{pointer-events:auto;border:1px solid #71809e;background:#101a32dd;color:#fff;border-radius:12px;padding:10px 13px;font-size:14px}
+.controls{position:absolute;left:16px;bottom:16px;display:flex;gap:8px}
+#tip{position:absolute;bottom:17px;right:16px;opacity:.65;font-size:12px}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="ui">
+  <div class="title">花火を打ち上げよう！</div>
+  <div class="help">画面をタップして、夜空に花火を打ち上げよう</div>
+  <div class="counter">打ち上げた数<b id="count">0</b>発</div>
+  <div class="controls"><button id="reset">↻ リセット</button><button id="sound">🔊 効果音 ON</button></div>
+  <div id="tip">タップする場所で花火の高さが変わります</div>
+</div>
+<script>
+const canvas=document.getElementById('c'),ctx=canvas.getContext('2d');
+let W,H,dpr,rockets=[],sparks=[],stars=[],count=0,soundOn=true,audioCtx=null;
+const colors=['#ff4b4b','#ffd34e','#5bbcff','#69e56f','#e889ff','#ff8b4d','#fff3a0'];
+function resize(){dpr=Math.min(devicePixelRatio||1,2);W=innerWidth;H=innerHeight;canvas.width=W*dpr;canvas.height=H*dpr;ctx.setTransform(dpr,0,0,dpr,0,0);
+ stars=Array.from({length:Math.floor(W*H/9000)},()=>({x:Math.random()*W,y:Math.random()*H*.7,r:Math.random()*1.4+.2,a:Math.random()}))}
+addEventListener('resize',resize);resize();
+
+function getAudio(){
+ if(!soundOn)return null;
+ if(!audioCtx) audioCtx=new (window.AudioContext||window.webkitAudioContext)();
+ if(audioCtx.state==='suspended') audioCtx.resume().catch(()=>{});
+ return audioCtx;
+}
+
+// 花火らしい3段階の効果音
+// 1) 打ち上げ：「ピーーー」と上がる笛
+function whoosh(){
+ const ac=getAudio(); if(!ac)return;
+ const now=ac.currentTime;
+
+ const o=ac.createOscillator(), g=ac.createGain();
+ const f=ac.createBiquadFilter();
+ o.type='sine';
+ o.frequency.setValueAtTime(2200,now);
+ o.frequency.exponentialRampToValueAtTime(1500,now+.34);
+ o.frequency.exponentialRampToValueAtTime(900,now+.58);
+ f.type='lowpass'; f.frequency.value=3000; f.Q.value=.7;
+ g.gain.setValueAtTime(.0001,now);
+ g.gain.exponentialRampToValueAtTime(.16,now+.055);
+ g.gain.setValueAtTime(.14,now+.38);
+ g.gain.exponentialRampToValueAtTime(.001,now+.62);
+ o.connect(f);f.connect(g);g.connect(ac.destination);
+ o.start(now);o.stop(now+.65);
+}
+
+// 2) 炸裂：「ドン！」という低く太い衝撃音
+function boom(){
+ const ac=getAudio(); if(!ac)return;
+ const now=ac.currentTime;
+
+ // 超低音の本体
+ const o=ac.createOscillator(), g=ac.createGain();
+ o.type='sine';
+ o.frequency.setValueAtTime(72,now);
+ o.frequency.exponentialRampToValueAtTime(28,now+.34);
+ g.gain.setValueAtTime(.0001,now);
+ g.gain.exponentialRampToValueAtTime(.72,now+.012);
+ g.gain.exponentialRampToValueAtTime(.001,now+.5);
+ o.connect(g);g.connect(ac.destination);
+ o.start(now);o.stop(now+.52);
+
+ // 「バン」という広帯域の衝撃
+ const len=Math.floor(ac.sampleRate*.22);
+ const buf=ac.createBuffer(1,len,ac.sampleRate), d=buf.getChannelData(0);
+ for(let i=0;i<len;i++) d[i]=(Math.random()*2-1)*Math.pow(1-i/len,2.8);
+ const n=ac.createBufferSource(), ng=ac.createGain(), nf=ac.createBiquadFilter();
+ nf.type='lowpass'; nf.frequency.value=900;
+ ng.gain.setValueAtTime(.5,now);
+ ng.gain.exponentialRampToValueAtTime(.001,now+.22);
+ n.buffer=buf;n.connect(nf);nf.connect(ng);ng.connect(ac.destination);n.start(now);
+}
+
+// 3) 火花：「強い雨」のようなパラパラ音
+// 連打時に音が止まらないよう、1回の炸裂につきAudioNodeを1つだけ使う
+function crackle(){
+ const ac=getAudio(); if(!ac)return;
+ const now=ac.currentTime;
+ const delay=.34, dur=1.12;
+ const len=Math.floor(ac.sampleRate*dur);
+ const buf=ac.createBuffer(1,len,ac.sampleRate);
+ const d=buf.getChannelData(0);
+
+ // 強い雨のような細かな「パラパラ」を、1本のノイズ波形にまとめる
+ for(let i=0;i<150;i++){
+   const pos=Math.floor((delay+Math.random()*.92)*ac.sampleRate);
+   const burstLen=Math.floor((.008+Math.random()*.018)*ac.sampleRate);
+   const amp=.10+Math.random()*.16;
+   for(let j=0;j<burstLen && pos+j<len;j++){
+     d[pos+j]+=(Math.random()*2-1)*amp*Math.pow(1-j/burstLen,1.8);
+   }
+ }
+
+ const n=ac.createBufferSource();
+ const g=ac.createGain();
+ const f=ac.createBiquadFilter();
+ f.type='bandpass'; f.frequency.value=2800; f.Q.value=.65;
+ g.gain.value=.72;
+ n.buffer=buf;
+ n.connect(f);f.connect(g);g.connect(ac.destination);
+ n.start(now);
+}
+
+function getAudio(){
+ if(!soundOn)return null;
+ if(!audioCtx) audioCtx=new (window.AudioContext||window.webkitAudioContext)();
+ if(audioCtx.state==='suspended') audioCtx.resume().catch(()=>{});
+ return audioCtx;
+}
+
+function launch(x,targetY){
+ const startX=W/2, startY=H-25;
+ rockets.push({x:startX,y:startY,vx:(x-startX)*.018,vy:-10-Math.random()*2,targetY,trail:[]});
+ count++;document.getElementById('count').textContent=count;whoosh();
+}
+function explode(x,y){
+ const col=colors[Math.floor(Math.random()*colors.length)];
+ const n=70+Math.floor(Math.random()*55),speed=2.2+Math.random()*2.4;
+ for(let i=0;i<n;i++){let a=Math.PI*2*i/n+Math.random()*.08,sp=speed*(.75+Math.random()*.55);
+   sparks.push({x,y,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp,life:1,max:.65+Math.random()*.5,col,size:1+Math.random()*2.2});
+ }
+ // smaller glitter
+ for(let i=0;i<28;i++) sparks.push({x,y,vx:(Math.random()-.5)*3,vy:(Math.random()-.5)*3,life:1,max:1,col:'#fff3bd',size:1});
+ boom();crackle();
+}
+canvas.addEventListener('pointerdown',e=>launch(e.clientX,Math.max(90,e.clientY)));
+document.getElementById('reset').onclick=()=>{rockets=[];sparks=[];count=0;document.getElementById('count').textContent=0};
+document.getElementById('sound').onclick=e=>{soundOn=!soundOn;e.currentTarget.textContent=soundOn?'🔊 効果音 ON':'🔇 効果音 OFF'};
+
+function draw(){
+ ctx.clearRect(0,0,W,H);
+ // stars
+ for(const s of stars){ctx.globalAlpha=.25+s.a*.55;ctx.fillStyle='#fff';ctx.beginPath();ctx.arc(s.x,s.y,s.r,0,7);ctx.fill()}ctx.globalAlpha=1;
+ // distant mountains / water
+ ctx.fillStyle='#030713';ctx.beginPath();ctx.moveTo(0,H*.83);for(let x=0;x<=W;x+=50)ctx.lineTo(x,H*.83-Math.sin(x*.012)*35-Math.sin(x*.031)*18);ctx.lineTo(W,H);ctx.lineTo(0,H);ctx.fill();
+ ctx.fillStyle='#071126';ctx.fillRect(0,H*.86,W,H*.14);
+ // water reflections
+ for(let i=0;i<14;i++){ctx.globalAlpha=.06;ctx.fillStyle='#9eb8e8';ctx.fillRect(Math.random()*W,H*.88+Math.random()*H*.1,20+Math.random()*80,1)}ctx.globalAlpha=1;
+ for(const r of rockets){
+   r.trail.push({x:r.x,y:r.y});if(r.trail.length>15)r.trail.shift();
+   for(let i=0;i<r.trail.length;i++){ctx.globalAlpha=i/r.trail.length*.4;ctx.fillStyle='#ffd37a';ctx.beginPath();ctx.arc(r.trail[i].x,r.trail[i].y,1.5,0,7);ctx.fill()}ctx.globalAlpha=1;
+   ctx.fillStyle='#fff4bd';ctx.beginPath();ctx.arc(r.x,r.y,3,0,7);ctx.fill();
+   r.x+=r.vx;r.y+=r.vy;r.vy+=.11;
+   if(r.y<=r.targetY||r.vy>0){explode(r.x,r.y);r.dead=true}
+ }
+ rockets=rockets.filter(r=>!r.dead);
+ for(const p of sparks){
+   ctx.globalAlpha=Math.max(0,p.life/p.max);
+   ctx.fillStyle=p.col;ctx.shadowBlur=8;ctx.shadowColor=p.col;ctx.beginPath();ctx.arc(p.x,p.y,p.size,0,7);ctx.fill();ctx.shadowBlur=0;
+   p.x+=p.vx;p.y+=p.vy;p.vx*=.985;p.vy=p.vy*.985+.035;p.life-=.012;
+ }
+ sparks=sparks.filter(p=>p.life>0);ctx.globalAlpha=1;
+ requestAnimationFrame(draw);
+}
+draw();
+</script>
+</body></html>
