@@ -126,6 +126,29 @@ function getAudio(){
  return audioCtx;
 }
 
+
+const members={
+'#ffffff':{name:'阿部菜々実',color:'#ffffff',comments:['きれいに咲いたね。夜空に大きな花が咲いたみたい。','いいね。こういう花火、好きだな。','おおっ、これは綺麗！もう一発見たい。','最高の瞬間だったね。ありがとう。']},
+'#62d9ff':{name:'水上凜巳花',color:'#62d9ff',comments:['わーー！めっちゃ綺麗！これはテンション上がる〜！','えっ、待って待って、今の花火すごくない！？','いいじゃんいいじゃん！もう一回いこ〜！','これは運命ってことでいいかな？']},
+'#ffd83d':{name:'金城まき',color:'#ffd83d',comments:['わぁ、かわいい！きれいに開いたね！','すごーい！もう一発打ってみよ！','黄色の花火、めっちゃ映えてる！','これ好き！なんかワクワクする〜！']},
+'#ff3b3b':{name:'中川心',color:'#ff3b3b',comments:['え、今のめっちゃよくない！？','待って、綺麗すぎてびっくりした！','これは盛れてる！花火が！笑','最高じゃん！もっと見たい〜！']},
+'#ff5ca8':{name:'桜咲みはね',color:'#ff5ca8',comments:['わぁ〜！かわいい花火だね♡','すごいすごい！笑顔になっちゃう〜！','きれい〜！癒されるね♡','こんな花火、一緒に見られてうれしい！']},
+'#a855ff':{name:'鈴木遥夏',color:'#a855ff',comments:['おお、いいところで開いたね！','これはかなり好き。綺麗だなぁ。','紫の花火、夜空に合うね。','いいね。次はもっと大きく咲かせよう！']},
+'#55e66b':{name:'小葉こな',color:'#55e66b',comments:['わぁ！きれい〜！こな、こういうの好き！','すごい！夜空がキラキラしてる〜！','見にこなきゃはじまらないでしょ〜！','かわいい花火！もう一回いこっ♡']}
+};
+let commentTimer=null;
+function showMemberComment(hex){
+ const m=members[hex]; if(!m)return;
+ const text=m.comments[Math.floor(Math.random()*m.comments.length)];
+ const lane=document.getElementById('commentBox');
+ const item=document.createElement('div');
+ item.className='commentItem';
+ item.style.setProperty('--member-color',m.color);
+ item.innerHTML='<span class="dot"></span>'+m.name+'　'+text;
+ lane.appendChild(item);
+ item.addEventListener('animationend',()=>item.remove());
+}
+
 function launch(x,targetY){
  const startX=W/2, startY=H-25;
  rockets.push({x:startX,y:startY,vx:(x-startX)*.018,vy:-10-Math.random()*2,targetY,trail:[]});
@@ -133,6 +156,7 @@ function launch(x,targetY){
 }
 function explode(x,y){
  const col=colors[Math.floor(Math.random()*colors.length)];
+ showMemberComment(col);
  const n=70+Math.floor(Math.random()*55),speed=2.2+Math.random()*2.4;
  for(let i=0;i<n;i++){let a=Math.PI*2*i/n+Math.random()*.08,sp=speed*(.75+Math.random()*.55);
    sparks.push({x,y,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp,life:1,max:.65+Math.random()*.5,col,size:1+Math.random()*2.2});
@@ -172,4 +196,45 @@ function draw(){
 }
 draw();
 </script>
+
+<style>
+#commentBox{
+  --member-color:#fff;
+  position:absolute;
+  left:0;
+  top:96px;
+  width:100%;
+  height:48px;
+  overflow:hidden;
+  opacity:1;
+  pointer-events:none;
+  z-index:20;
+}
+.commentItem{
+  position:absolute;
+  left:100%;
+  top:0;
+  white-space:nowrap;
+  padding:9px 16px;
+  border:1px solid var(--member-color);
+  border-radius:999px;
+  background:rgba(5,10,24,.52);
+  box-shadow:0 0 12px rgba(255,255,255,.14);
+  font-size:clamp(13px,3.5vw,18px);
+  font-weight:700;
+  animation:commentFlow 3.0s linear forwards;
+}
+.commentItem .dot{
+  display:inline-block;width:9px;height:9px;border-radius:50%;
+  background:var(--member-color);
+  box-shadow:0 0 8px var(--member-color);
+  margin-right:7px;
+}
+@keyframes commentFlow{
+  from{left:100%;transform:translateX(0)}
+  to{left:0;transform:translateX(-115%)}
+}
+</style>
+<div id="commentBox"></div>
+
 </body></html>
